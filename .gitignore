@@ -1,0 +1,15 @@
+.env
+.DS_Store
+提交/
+**/log/
+**/memory/
+**/output/
+**/node_modules/
+**/.venv*
+导入字幕/capcut-mate/
+导入字幕/capcut-mate.log
+*.mp4
+*.mov
+*.mp3
+saved_selection.json
+delete_segments.json
