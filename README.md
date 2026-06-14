@@ -2,9 +2,29 @@
 
 > 基于 [Ceeon/videocut-skills](https://github.com/Ceeon/videocut-skills) 的增强版 Claude Code Skill，专为口播视频设计。
 
-## 🔥 重点优化（相比原版）
+## 主要功能
 
-### 1. 审核页面全面增强
+### 1. 剪口播 — 口播视频智能剪辑
+
+AI 自动识别口误、重复、停顿、语气词，增强版审核页面人工确认后一键剪辑。
+
+- 增强版审核页：视频字幕叠加 + 音频波形 + 深色模式 + 项目切换
+- 支持火山引擎云端 / FunASR 本地两种转录模式
+- 支持 .mp4 / .mkv / .mov 等多种格式
+
+### 2. 导入字幕 — 一键生成剪映草稿
+
+AI 转录 + 校对，默认直接生成剪映草稿（带花字效果 + 入场动画），也可导出 SRT。
+
+### 3. 高清化 — 专业级导出
+
+2-pass 编码 + 锐化，匹配原片参数的 1.2x 码率输出，肉眼无损。
+
+### 4. 自进化 — AI 越用越准
+
+用户纠错后自动更新规则文件，记住你的偏好（静音阈值、语气词处理等）。
+
+## 审核页面增强（相比原版）
 
 原版审核页只有纯文字列表，本版增加了专业级可视化：
 
@@ -16,11 +36,13 @@
 | **字幕-波形联动** | 文字列表选中 → 波形同步变红，双向实时同步 |
 | **可拖动分栏** | 左右面板默认 50/50，拖动中间分隔线调整宽度，双击重置 |
 | **深色模式** | 一键切换暗/亮主题，偏好自动保存到 localStorage |
-| **项目管理** | 头部下拉框列出所有已有项目，点击切换（服务器自动切换目录） |
+| **项目管理** | 头部下拉框列出所有已有项目，点击切换 |
 | **末尾静音检测** | 自动检测最后一词到视频结尾的空白（原版不处理） |
 | **剪辑完成弹窗** | 替代原版 alert，新增「📂 打开目录」按钮直接打开输出目录 |
 
-### 2. 火山引擎 API 修复
+## 其他优化
+
+### 火山引擎 API 修复
 
 原作者脚本使用的 API 端点已过时，本版修复为官方最新接口：
 
@@ -29,33 +51,23 @@
 | 端点 | `/api/v1/vc/submit` | `/api/v3/auc/bigmodel/submit` |
 | 认证 | `x-api-key: appid:token` | `x-api-key: {UUID key}` |
 | 配置 | 需要 APPID + Token + Cluster | **只需一个 API Key** |
-| 响应解析 | `resp.code` | `x-api-status-code` header |
 
-### 3. FunASR 本地转录支持
+### FunASR 本地转录
 
 新增离线转录能力，无需网络和 API Key：
 
 - 使用阿里 FunASR `paraformer-zh` 模型，支持字级别时间戳
-- 输出格式与火山引擎完全兼容，下游脚本零改动
 - `.env` 中一行切换：`TRANSCRIPTION_MODE=funasr`
 - 首次运行自动下载模型（约 1GB），之后完全本地运行
 
-### 4. 兼容性修复
+### 兼容性修复
 
 | 问题 | 修复 |
 |------|------|
-| **MKV 文件支持** | ffprobe/ffmpeg 命令兼容 .mkv 等多种容器格式 |
-| **ffprobe 尾部逗号** | macOS 上 `-of csv=p=0` 输出带逗号导致编码失败，已修复 |
-| **cut_video.sh 参数错误** | 码率/像素格式解析失败导致剪辑报错，已修复 |
-| **中文路径** | 用 Python 处理中文路径，避免 shell 编码问题 |
-
-### 5. 架构改进
-
-| 改进 | 说明 |
-|------|------|
-| **统一转录入口** | `transcribe.sh` 路由脚本，根据 .env 自动选择云端/本地后端 |
-| **输出路径统一** | 剪辑结果保存到项目根目录（原版保存在审核子目录） |
-| **保存选中清理** | 每次重新生成审核页自动清除旧的 saved_selection.json |
+| MKV 文件支持 | ffprobe/ffmpeg 命令兼容 .mkv 等多种容器格式 |
+| ffprobe 尾部逗号 | macOS 上输出带逗号导致编码失败，已修复 |
+| cut_video.sh 参数错误 | 码率/像素格式解析失败导致剪辑报错，已修复 |
+| 中文路径 | 用 Python 处理中文路径，避免 shell 编码问题 |
 
 ## 快速开始
 
@@ -121,13 +133,13 @@ videocut-use/
 ├── .env.example            # 配置模板
 ├── 剪口播/                 # 核心：转录 + 审核 + 剪辑
 │   └── scripts/
-│       ├── transcribe.sh          # 统一转录路由（新增）
-│       ├── funasr_transcribe.py   # FunASR 本地转录（新增）
-│       ├── volcengine_transcribe.sh  # 火山引擎 v3 API（修复）
+│       ├── transcribe.sh          # 统一转录路由
+│       ├── funasr_transcribe.py   # FunASR 本地转录
+│       ├── volcengine_transcribe.sh  # 火山引擎 v3 API
 │       ├── generate_subtitles.js
-│       ├── generate_review.js     # 增强版审核页（重写）
-│       ├── review_server.js       # 审核服务器（增强）
-│       └── cut_video.sh           # FFmpeg 剪辑（修复）
+│       ├── generate_review.js     # 增强版审核页
+│       ├── review_server.js       # 审核服务器
+│       └── cut_video.sh           # FFmpeg 剪辑
 ├── 导入字幕/               # 字幕导入剪映
 ├── 高清化/                 # 2-pass + 锐化导出
 ├── 自进化/                 # AI 自学习偏好
