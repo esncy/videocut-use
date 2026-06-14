@@ -694,6 +694,9 @@ const html = `<!DOCTYPE html>
         <option value="2">2.0x</option>
       </select>
       <div class="header-divider"></div>
+      <button class="header-btn" onclick="openDir()" title="打开导出目录">
+        <span>&#128194;</span> 导出目录
+      </button>
       <button class="header-btn" onclick="copyDeleteList()" title="复制删除列表">
         <span>&#128203;</span> 字幕
       </button>
@@ -1540,6 +1543,9 @@ const html = `<!DOCTYPE html>
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     }
 
+    async function openDir() {
+      try { await fetch('/api/open-directory', { method: 'POST' }); } catch (e) {}
+    }
     async function openDirectory(btn) {
       btn.disabled = true;
       btn.textContent = '打开中...';
