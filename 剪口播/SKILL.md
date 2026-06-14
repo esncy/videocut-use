@@ -87,6 +87,12 @@ cd "$BASE_DIR"
 
 ### 步骤 1-3: 转录
 
+> **转录模式**（在 `.env` 中设置 `TRANSCRIPTION_MODE`）：
+> - `volcengine`（默认）：火山引擎云端 ASR，需 API Key
+> - `funasr`：本地 FunASR，无需网络，需安装 funasr + modelscope
+>
+> 统一入口：`bash scripts/transcribe.sh audio.mp3`（自动根据 .env 选择后端）
+
 ```bash
 cd 1_转录
 

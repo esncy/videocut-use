@@ -33,27 +33,45 @@ DURATION=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "file:$INP
 BITRATE=$(ffprobe -v error -show_entries stream=bit_rate -select_streams v:0 -of csv=p=0 "file:$INPUT" | tr -d ',')
 PROFILE=$(ffprobe -v error -show_entries stream=profile -select_streams v:0 -of csv=p=0 "file:$INPUT" | tr -d ',')
 PIX_FMT=$(ffprobe -v error -show_entries stream=pix_fmt -select_streams v:0 -of csv=p=0 "file:$INPUT" | tr -d ',')
+CODEC=$(ffprobe -v error -show_entries stream=codec_name -select_streams v:0 -of csv=p=0 "file:$INPUT" | tr -d ',')
+
+# HEVC/MKV 等容器可能不报告 bit_rate，用文件大小估算
+if [ -z "$BITRATE" ] || [ "$BITRATE" = "N/A" ]; then
+  FILE_SIZE=$(stat -f%z "$INPUT" 2>/dev/null || stat -c%s "$INPUT" 2>/dev/null)
+  BITRATE=$(python3 -c "print(int($FILE_SIZE * 8 / $DURATION))")
+  echo "ℹ️  码率未报告，用文件大小估算"
+fi
 
 BITRATE_K=$((BITRATE/1000))
 MAXRATE_K=$((BITRATE_K * 13 / 10))
 BUFSIZE_K=$((BITRATE_K * 2))
 
 echo "📹 视频时长: ${DURATION}s"
-echo "📊 原片参数: ${BITRATE_K}kbps, profile=${PROFILE}, pix_fmt=${PIX_FMT}"
-echo "⚙️ 匹配码率重编码（-ss/-to 逐段提取，无 trim filter）"
+echo "📊 原片参数: codec=${CODEC}, ${BITRATE_K}kbps, profile=${PROFILE}, pix_fmt=${PIX_FMT}"
+
+# 根据编码器选择 ffmpeg encoder
+case "$CODEC" in
+  "hevc"|"h265") ENCODER="libx265"; X265_PROFILE="main" ;;
+  *) ENCODER="libx264" ;;
+esac
+echo "⚙️ 匹配码率重编码（-ss/-to 逐段提取，encoder=${ENCODER}）"
 
 # 创建临时目录
 TMP_DIR=$(mktemp -d)
 trap "rm -rf $TMP_DIR" EXIT
 
-# 映射 profile
-PROFILE_LC=$(echo "$PROFILE" | tr '[:upper:]' '[:lower:]')
-case "$PROFILE_LC" in
-  "high") X264_PROFILE="high" ;;
-  "main") X264_PROFILE="main" ;;
-  "baseline") X264_PROFILE="baseline" ;;
-  *) X264_PROFILE="high" ;;
-esac
+# 映射 profile（H.264 用 libx264 profile，HEVC 直接用 main）
+if [ "$ENCODER" = "libx265" ]; then
+  X264_PROFILE="main"
+else
+  PROFILE_LC=$(echo "$PROFILE" | tr '[:upper:]' '[:lower:]')
+  case "$PROFILE_LC" in
+    "high") X264_PROFILE="high" ;;
+    "main") X264_PROFILE="main" ;;
+    "baseline") X264_PROFILE="baseline" ;;
+    *) X264_PROFILE="high" ;;
+  esac
+fi
 
 # 用 node 计算保留片段，生成提取脚本和 concat 列表
 TOTAL_SEGS=$(node -e "
@@ -110,7 +128,7 @@ if [ -z "$TOTAL_SEGS" ] || [ "$TOTAL_SEGS" -eq 0 ]; then
 fi
 
 echo "✂️ 提取 $TOTAL_SEGS 个片段（并行度 $PARALLEL）..."
-echo "   编码: libx264 -profile:v $X264_PROFILE -b:v ${BITRATE_K}k -pix_fmt $PIX_FMT"
+echo "   编码: $ENCODER -profile:v $X264_PROFILE -b:v ${BITRATE_K}k -pix_fmt $PIX_FMT"
 
 # node 生成每段独立的 shell 脚本
 node -e "
@@ -120,16 +138,16 @@ segs.forEach((s, i) => {
   const script = '#!/bin/bash\nffmpeg -y -v error' +
     ' -ss ' + s.start.toFixed(3) + ' -to ' + s.end.toFixed(3) +
     ' -accurate_seek -i \"file:' + process.argv[1] + '\"' +
-    ' -c:v libx264 -profile:v ' + process.argv[2] +
-    ' -b:v ' + process.argv[3] + 'k -maxrate ' + process.argv[4] + 'k -bufsize ' + process.argv[5] + 'k' +
-    ' -pix_fmt ' + process.argv[6] +
+    ' -c:v ' + process.argv[2] + ' -profile:v ' + process.argv[3] +
+    ' -b:v ' + process.argv[4] + 'k -maxrate ' + process.argv[5] + 'k -bufsize ' + process.argv[6] + 'k' +
+    ' -pix_fmt ' + process.argv[7] +
     ' -c:a aac -b:a 128k' +
     ' -avoid_negative_ts make_zero' +
     ' \"file:' + s.out + '\"\n';
   const padded = String(i).padStart(5, '0');
   fs.writeFileSync('$TMP_DIR/cmd_' + padded + '.sh', script);
 });
-" "$INPUT" "$X264_PROFILE" "$BITRATE_K" "$MAXRATE_K" "$BUFSIZE_K" "$PIX_FMT"
+" "$INPUT" "$ENCODER" "$X264_PROFILE" "$BITRATE_K" "$MAXRATE_K" "$BUFSIZE_K" "$PIX_FMT"
 
 # 逐段提取（控制并行度）
 RUNNING=0

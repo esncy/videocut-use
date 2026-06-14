@@ -38,6 +38,10 @@ const MIME_TYPES = {
   '.json': 'application/json',
   '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4',
+  '.mkv': 'video/x-matroska',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.avi': 'video/x-msvideo',
 };
 
 const server = http.createServer((req, res) => {

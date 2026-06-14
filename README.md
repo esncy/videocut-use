@@ -2,44 +2,78 @@
 
 > 基于 [Ceeon/videocut-skills](https://github.com/Ceeon/videocut-skills) 的增强版 Claude Code Skill，专为口播视频设计。
 
-## 增强功能（相比原版）
+## 🔥 重点优化（相比原版）
+
+### 1. 审核页面全面增强
+
+原版审核页只有纯文字列表，本版增加了专业级可视化：
 
 | 功能 | 说明 |
 |------|------|
-| **字幕叠加预览** | 视频播放时实时显示当前字幕，选中的字幕显示红色删除线 |
-| **音频波形显示** | 专业编辑器风格波形（深灰背景 + 绿色波形线），选中区域红色高亮 |
-| **字幕-波形联动** | 选中字幕 → 波形变红；波形框选 → 自动选中字幕 |
-| **可拖动分栏** | 左右面板默认 50/50，拖动中间分隔线调整，双击重置 |
-| **深色模式** | 一键切换暗/亮主题，偏好自动保存 |
-| **项目管理** | 头部下拉框列出所有已有项目，点击切换 |
-| **末尾静音检测** | 自动检测最后一词到视频结尾的空白 |
-| **打开目录** | 剪辑完成后一键打开输出目录 |
+| **视频字幕叠加** | 播放时视频底部实时显示当前字幕，待删除字幕显示红色删除线 |
+| **音频波形图** | 专业编辑器风格（深灰背景 + 绿色波形），选中区域红色高亮，播放头绿色发光跟踪 |
+| **波形交互** | 点击波形跳转，拖动框选时间段自动选中对应字幕 |
+| **字幕-波形联动** | 文字列表选中 → 波形同步变红，双向实时同步 |
+| **可拖动分栏** | 左右面板默认 50/50，拖动中间分隔线调整宽度，双击重置 |
+| **深色模式** | 一键切换暗/亮主题，偏好自动保存到 localStorage |
+| **项目管理** | 头部下拉框列出所有已有项目，点击切换（服务器自动切换目录） |
+| **末尾静音检测** | 自动检测最后一词到视频结尾的空白（原版不处理） |
+| **剪辑完成弹窗** | 替代原版 alert，新增「📂 打开目录」按钮直接打开输出目录 |
 
-## 为什么做这个？
+### 2. 火山引擎 API 修复
 
-剪映的"智能剪口播"有两个痛点：
-1. **无法理解语义**：重复说的句子、说错后纠正的内容，它识别不出来
-2. **字幕质量差**：专业术语（Claude Code、MCP、API）经常识别错误
+原作者脚本使用的 API 端点已过时，本版修复为官方最新接口：
 
-这个 Agent 用 Claude 的语义理解能力解决第一个问题，用自定义词典解决第二个问题。
+| 项目 | 原作者 | 本版修复 |
+|------|--------|---------|
+| 端点 | `/api/v1/vc/submit` | `/api/v3/auc/bigmodel/submit` |
+| 认证 | `x-api-key: appid:token` | `x-api-key: {UUID key}` |
+| 配置 | 需要 APPID + Token + Cluster | **只需一个 API Key** |
+| 响应解析 | `resp.code` | `x-api-status-code` header |
+
+### 3. FunASR 本地转录支持
+
+新增离线转录能力，无需网络和 API Key：
+
+- 使用阿里 FunASR `paraformer-zh` 模型，支持字级别时间戳
+- 输出格式与火山引擎完全兼容，下游脚本零改动
+- `.env` 中一行切换：`TRANSCRIPTION_MODE=funasr`
+- 首次运行自动下载模型（约 1GB），之后完全本地运行
+
+### 4. 兼容性修复
+
+| 问题 | 修复 |
+|------|------|
+| **MKV 文件支持** | ffprobe/ffmpeg 命令兼容 .mkv 等多种容器格式 |
+| **ffprobe 尾部逗号** | macOS 上 `-of csv=p=0` 输出带逗号导致编码失败，已修复 |
+| **cut_video.sh 参数错误** | 码率/像素格式解析失败导致剪辑报错，已修复 |
+| **中文路径** | 用 Python 处理中文路径，避免 shell 编码问题 |
+
+### 5. 架构改进
+
+| 改进 | 说明 |
+|------|------|
+| **统一转录入口** | `transcribe.sh` 路由脚本，根据 .env 自动选择云端/本地后端 |
+| **输出路径统一** | 剪辑结果保存到项目根目录（原版保存在审核子目录） |
+| **保存选中清理** | 每次重新生成审核页自动清除旧的 saved_selection.json |
 
 ## 快速开始
 
 ### 1. 安装
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/videocut-use.git ~/.claude/skills/videocut-use
+git clone https://github.com/esncy/videocut-use.git ~/.claude/skills/videocut-use
 ```
 
-### 2. 配置 API Key
+### 2. 配置
 
 ```bash
 cd ~/.claude/skills/videocut-use
 cp .env.example .env
-# 编辑 .env，填入火山引擎 API Key（UUID 格式）
+# 编辑 .env，至少配置以下之一：
+#   VOLCENGINE_API_KEY=xxx  （火山引擎云端转录）
+#   TRANSCRIPTION_MODE=funasr  （本地转录，无需 key）
 ```
-
-API Key 获取：https://console.volcengine.com/speech/app
 
 ### 3. 依赖
 
@@ -48,72 +82,61 @@ API Key 获取：https://console.volcengine.com/speech/app
 | Node.js 18+ | 运行脚本 | `brew install node` |
 | FFmpeg | 视频剪辑 | `brew install ffmpeg` |
 | Claude Code | AI Agent | https://claude.ai/code |
+| FunASR（可选） | 本地转录 | `pip install funasr modelscope` |
 
 ### 4. 使用
-
-在 Claude Code 中输入：
 
 ```
 /videocut-use:剪口播 视频.mp4
 ```
 
-或直接说：「帮我剪这个口播视频 xxx.mp4」
-
-## 使用流程
+## 完整流程
 
 ```
-视频文件
+视频文件 (.mp4/.mkv/.mov)
   ↓
-提取音频 → 火山引擎 ASR 转录（字级别时间戳）
+提取音频 → 转录（火山引擎云端 / FunASR 本地）
   ↓
 AI 多 Agent 并行分析（静音/口误/重复/语气词）
   ↓
-生成增强版审核网页
-  ├── 视频播放 + 字幕叠加
-  ├── 音频波形（可框选）
-  ├── 左右可拖动分栏
-  └── 项目切换 / 深色模式
+增强版审核页面
+  ├── 视频 + 字幕叠加预览
+  ├── 音频波形（可点击/框选）
+  ├── 深色模式 / 项目切换
+  └── 可拖动左右分栏
   ↓
-人工审核 → 执行剪辑 → 输出目录
+人工确认 → FFmpeg 剪辑 → 输出目录
+  ↓（可选）
+导入字幕 → 剪映草稿（带花字+动画）
+  ↓（可选）
+高清化 → 2-pass + 锐化 → 最终输出
 ```
-
-## 审核页面快捷键
-
-| 快捷键 | 功能 |
-|--------|------|
-| Space | 播放/暂停 |
-| 双击字幕 | 选中/取消 |
-| Shift + 拖动 | 批量选择 |
-| ← → | 跳 1 秒 |
-| Shift + ← → | 跳 5 秒 |
-| ⌘K | 搜索 |
 
 ## 目录结构
 
 ```
 videocut-use/
-├── README.md           # 本文件
-├── LICENSE             # MIT License
-├── SKILL.md            # Claude Code skill 入口
-├── .env.example        # API Key 模板
-├── 剪口播/             # 核心：转录 + 审核 + 剪辑
-│   ├── SKILL.md
-│   ├── scripts/
-│   │   ├── volcengine_transcribe.sh  # 火山引擎 ASR（v3 API）
-│   │   ├── generate_subtitles.js     # 字幕生成
-│   │   ├── generate_review.js        # 增强版审核页面
-│   │   ├── review_server.js          # 审核服务器
-│   │   └── cut_video.sh              # FFmpeg 剪辑
-│   └── 用户习惯/      # 可自定义规则
-├── 导入字幕/           # 字幕导入剪映
-├── 高清化/             # 2-pass + 锐化导出
-├── 自进化/             # AI 自学习偏好
-└── 字幕/词典.txt       # 专业术语词典
+├── SKILL.md                # Claude Code skill 入口
+├── LICENSE                 # MIT License
+├── .env.example            # 配置模板
+├── 剪口播/                 # 核心：转录 + 审核 + 剪辑
+│   └── scripts/
+│       ├── transcribe.sh          # 统一转录路由（新增）
+│       ├── funasr_transcribe.py   # FunASR 本地转录（新增）
+│       ├── volcengine_transcribe.sh  # 火山引擎 v3 API（修复）
+│       ├── generate_subtitles.js
+│       ├── generate_review.js     # 增强版审核页（重写）
+│       ├── review_server.js       # 审核服务器（增强）
+│       └── cut_video.sh           # FFmpeg 剪辑（修复）
+├── 导入字幕/               # 字幕导入剪映
+├── 高清化/                 # 2-pass + 锐化导出
+├── 自进化/                 # AI 自学习偏好
+└── 字幕/词典.txt           # 专业术语词典
 ```
 
 ## 致谢
 
-本项目基于 [Ceeon/videocut-skills](https://github.com/Ceeon/videocut-skills) 开发，遵循 MIT License。
+基于 [Ceeon/videocut-skills](https://github.com/Ceeon/videocut-skills) 开发，遵循 MIT License。
 
 ## License
 
